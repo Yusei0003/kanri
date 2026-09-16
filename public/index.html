@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>kanri — アプリ管理ダッシュボード</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗂️</text></svg>">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">🗂️</span>
+    <div>
+      <h1>kanri</h1>
+      <p class="brand-sub">Claude Code で作ったアプリの台帳とランチャー</p>
+    </div>
+  </div>
+  <div class="topbar-actions">
+    <button class="btn" id="btn-scan">フォルダをスキャン</button>
+    <button class="btn btn-primary" id="btn-new">＋ アプリを登録</button>
+  </div>
+</header>
+
+<section class="stats" id="stats"></section>
+
+<section class="toolbar">
+  <input type="search" id="search" class="input" placeholder="名前・説明・タグで絞り込み">
+  <div class="chips" id="status-filters"></div>
+  <label class="toggle"><input type="checkbox" id="hide-archived" checked> 凍結を隠す</label>
+</section>
+
+<main id="app-list" class="grid"></main>
+<p class="empty" id="empty" hidden>まだアプリが登録されていません。「フォルダをスキャン」で自動検出するか、「＋ アプリを登録」から追加してください。</p>
+
+<!-- 編集ダイアログ -->
+<dialog id="edit-dialog" class="dialog">
+  <form id="edit-form" method="dialog">
+    <h2 id="edit-title">アプリを登録</h2>
+    <div class="field"><label for="f-name">アプリ名 <span class="req">必須</span></label>
+      <input class="input" id="f-name" name="name" required placeholder="例: 例規検索ツール"></div>
+    <div class="field"><label for="f-description">説明・用途</label>
+      <textarea class="input" id="f-description" name="description" rows="2" placeholder="何のために作ったか。半年後の自分への申し送り"></textarea></div>
+    <div class="field"><label for="f-repoPath">ローカルフォルダのパス</label>
+      <input class="input" id="f-repoPath" name="repoPath" placeholder="C:\\Users\\you\\projects\\myapp"></div>
+    <div class="field"><label for="f-startCommand">起動コマンド</label>
+      <input class="input mono" id="f-startCommand" name="startCommand" placeholder="npm run dev"></div>
+    <div class="row">
+      <div class="field"><label for="f-port">ポート</label>
+        <input class="input" id="f-port" name="port" type="number" min="1" max="65535" placeholder="3000"></div>
+      <div class="field"><label for="f-status">ステータス</label>
+        <select class="input" id="f-status" name="status"></select></div>
+    </div>
+    <div class="field"><label for="f-url">開くURL <span class="hint">未入力ならポートから自動生成</span></label>
+      <input class="input" id="f-url" name="url" placeholder="http://localhost:3000"></div>
+    <div class="field"><label for="f-github">GitHub URL</label>
+      <input class="input" id="f-github" name="github" placeholder="https://github.com/user/repo"></div>
+    <div class="field"><label for="f-tags">タグ <span class="hint">カンマ区切り</span></label>
+      <input class="input" id="f-tags" name="tags" placeholder="業務改善, 試作"></div>
+    <div class="dialog-actions">
+      <button type="button" class="btn btn-danger" id="btn-delete" hidden>削除</button>
+      <span class="spacer"></span>
+      <button type="button" class="btn" id="btn-cancel">キャンセル</button>
+      <button type="submit" class="btn btn-primary">保存</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- スキャンダイアログ -->
+<dialog id="scan-dialog" class="dialog">
+  <h2>フォルダをスキャン</h2>
+  <p class="hint">指定したフォルダの下（3階層まで）から git リポジトリを探します。</p>
+  <div class="field"><label for="scan-root">スキャンするフォルダ</label>
+    <div class="row-inline">
+      <input class="input mono" id="scan-root" placeholder="/home/you/projects">
+      <button class="btn btn-primary" id="btn-run-scan">検索</button>
+    </div>
+  </div>
+  <div id="scan-results" class="scan-results"></div>
+  <div class="dialog-actions">
+    <span class="spacer"></span>
+    <button type="button" class="btn" id="btn-scan-close">閉じる</button>
+    <button type="button" class="btn btn-primary" id="btn-import" disabled>選んだものを登録</button>
+  </div>
+</dialog>
+
+<!-- 詳細パネル -->
+<aside id="detail" class="detail" hidden>
+  <div class="detail-head">
+    <h2 id="detail-name"></h2>
+    <button class="btn btn-icon" id="detail-close" aria-label="閉じる">✕</button>
+  </div>
+  <nav class="tabs">
+    <button class="tab is-active" data-tab="todos">TODO</button>
+    <button class="tab" data-tab="notes">メモ</button>
+    <button class="tab" data-tab="logs">起動ログ</button>
+  </nav>
+  <div class="tab-panel" data-panel="todos">
+    <form id="todo-form" class="row-inline">
+      <input class="input" id="todo-input" placeholder="次にやること">
+      <button class="btn btn-primary" type="submit">追加</button>
+    </form>
+    <ul id="todo-list" class="todo-list"></ul>
+  </div>
+  <div class="tab-panel" data-panel="notes" hidden>
+    <textarea id="notes-input" class="input notes" rows="14" placeholder="設計メモ、詰まった点、引き継ぎ事項など"></textarea>
+    <p class="hint" id="notes-status">入力すると自動保存されます</p>
+  </div>
+  <div class="tab-panel" data-panel="logs" hidden>
+    <div class="row-inline">
+      <span class="hint" id="log-status"></span>
+      <span class="spacer"></span>
+      <label class="toggle"><input type="checkbox" id="log-follow" checked> 自動更新</label>
+    </div>
+    <pre id="log-view" class="log-view"></pre>
+  </div>
+</aside>
+
+<div id="toast" class="toast" hidden></div>
+<script src="/app.js"></script>
+</body>
+</html>
