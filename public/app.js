@@ -192,6 +192,9 @@ function renderCard(app) {
         app.name,
       ]),
       el('span', { className: `badge badge-${app.status}`, textContent: STATUS_LABELS[app.status] || app.status }),
+      app.autoDetected
+        ? el('span', { className: 'badge badge-auto', textContent: '自動検出', title: '監視フォルダから kanri が自動で見つけて登録しました' })
+        : null,
     ]),
     app.description ? el('p', { className: 'card-desc', textContent: app.description }) : null,
     meta.length ? el('div', { className: 'card-meta' }, meta) : null,
@@ -298,6 +301,20 @@ function openEdit(app = null) {
   $('#edit-dialog').showModal();
 }
 
+// ---------- 監視フォルダ（自動検出の設定） ----------
+function renderSettingsRoots(roots) {
+  $('#settings-roots').replaceChildren(...roots.map((root) => el('li', {}, [
+    el('span', { className: 'mono', textContent: root }),
+    el('button', {
+      className: 'btn btn-sm', textContent: '削除',
+      onclick: guard(async () => {
+        const { settings } = await api('/settings', { method: 'PATCH', body: { scanRoots: roots.filter((r) => r !== root) } });
+        renderSettingsRoots(settings.scanRoots);
+      }),
+    }),
+  ])));
+}
+
 // ---------- スキャン ----------
 function renderScanResults() {
   const node = $('#scan-results');
@@ -316,6 +333,7 @@ function renderScanResults() {
     el('div', {}, [
       el('div', {}, [item.name, item.registered ? ' （登録済み）' : '']),
       el('small', { className: 'mono', textContent: item.repoPath }),
+      item.description ? el('div', {}, [el('small', { textContent: item.description })]) : null,
       item.startCommand ? el('div', {}, [el('small', { className: 'mono', textContent: `起動: ${item.startCommand}` })]) : null,
     ]),
   ])));
@@ -323,8 +341,17 @@ function renderScanResults() {
 }
 
 // ---------- 起動・イベント ----------
+let knownAppIds = null; // 自動検出で新しく増えたアプリを見分けるための前回スナップショット
+
 async function refresh() {
   const { apps } = await api('/apps');
+  if (knownAppIds) {
+    const detected = apps.filter((a) => a.autoDetected && !knownAppIds.has(a.id));
+    if (detected.length) {
+      toast(`📂 監視フォルダから自動検出: ${detected.map((a) => a.name).join('、')}`);
+    }
+  }
+  knownAppIds = new Set(apps.map((a) => a.id));
   state.apps = apps;
   render();
 }
@@ -370,6 +397,39 @@ function wireEvents() {
     if (state.detailId === app.id) state.detailId = null;
     toast('削除しました');
     await refresh();
+  }));
+
+  $('#btn-settings').addEventListener('click', guard(async () => {
+    const { settings } = await api('/settings');
+    renderSettingsRoots(settings.scanRoots || []);
+    $('#settings-dialog').showModal();
+    $('#settings-new-root').focus();
+  }));
+  $('#btn-settings-close').addEventListener('click', () => $('#settings-dialog').close());
+  $('#btn-add-root').addEventListener('click', guard(async () => {
+    const input = $('#settings-new-root');
+    const root = input.value.trim();
+    if (!root) return;
+    const { settings: current } = await api('/settings');
+    const { settings } = await api('/settings', { method: 'PATCH', body: { scanRoots: [...current.scanRoots, root] } });
+    input.value = '';
+    renderSettingsRoots(settings.scanRoots);
+  }));
+  $('#settings-new-root').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); $('#btn-add-root').click(); }
+  });
+
+  $('#btn-probe').addEventListener('click', guard(async () => {
+    const form = $('#edit-form');
+    const repoPath = form.repoPath.value.trim();
+    if (!repoPath) return toast('先にフォルダのパスを入力してください', true);
+    const info = await api('/probe', { method: 'POST', body: { repoPath } });
+    // すでに入力済みの項目は上書きしない
+    if (!form.name.value.trim()) form.name.value = info.name || '';
+    if (!form.description.value.trim()) form.description.value = info.description || '';
+    if (!form.startCommand.value.trim()) form.startCommand.value = info.startCommand || '';
+    if (!form.github.value.trim()) form.github.value = info.github || '';
+    toast('フォルダの内容から自動入力しました');
   }));
 
   $('#btn-scan').addEventListener('click', () => {

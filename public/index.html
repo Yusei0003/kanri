@@ -17,6 +17,7 @@
     </div>
   </div>
   <div class="topbar-actions">
+    <button class="btn" id="btn-settings" title="監視フォルダを設定すると、新しいアプリを自動で見つけて登録します">監視フォルダ</button>
     <button class="btn" id="btn-scan">フォルダをスキャン</button>
     <button class="btn btn-primary" id="btn-new">＋ アプリを登録</button>
     <button class="btn" id="btn-quit" title="kanri のサーバーを終了します">終了</button>
@@ -43,7 +44,11 @@
     <div class="field"><label for="f-description">説明・用途</label>
       <textarea class="input" id="f-description" name="description" rows="2" placeholder="何のために作ったか。半年後の自分への申し送り"></textarea></div>
     <div class="field"><label for="f-repoPath">ローカルフォルダのパス</label>
-      <input class="input" id="f-repoPath" name="repoPath" placeholder="C:\\Users\\you\\projects\\myapp"></div>
+      <div class="row-inline">
+        <input class="input mono" id="f-repoPath" name="repoPath" placeholder="C:\\Users\\you\\projects\\myapp">
+        <button type="button" class="btn" id="btn-probe" title="このフォルダから名前・起動コマンドなどを推測して埋めます">自動入力</button>
+      </div>
+    </div>
     <div class="field"><label for="f-startCommand">起動コマンド</label>
       <input class="input mono" id="f-startCommand" name="startCommand" placeholder="npm run dev"></div>
     <div class="row">
@@ -82,6 +87,27 @@
     <span class="spacer"></span>
     <button type="button" class="btn" id="btn-scan-close">閉じる</button>
     <button type="button" class="btn btn-primary" id="btn-import" disabled>選んだものを登録</button>
+  </div>
+</dialog>
+
+<!-- 監視フォルダ設定ダイアログ -->
+<dialog id="settings-dialog" class="dialog">
+  <h2>監視フォルダ</h2>
+  <p class="hint">
+    ここに登録したフォルダの下を kanri が数分おきに見にいき、
+    新しい git リポジトリを見つけたら「構想」ステータスで自動登録します。
+    新しいアプリを作るたびに手動で登録する必要が無くなります。
+  </p>
+  <div class="field">
+    <div class="row-inline">
+      <input class="input mono" id="settings-new-root" placeholder="/home/you/projects">
+      <button class="btn btn-primary" id="btn-add-root">追加</button>
+    </div>
+  </div>
+  <ul id="settings-roots" class="todo-list"></ul>
+  <div class="dialog-actions">
+    <span class="spacer"></span>
+    <button type="button" class="btn" id="btn-settings-close">閉じる</button>
   </div>
 </dialog>
 

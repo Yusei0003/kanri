@@ -9,7 +9,7 @@ const { spawn } = require('node:child_process');
 const store = require('./lib/store');
 const runner = require('./lib/runner');
 const git = require('./lib/git');
-const { scan } = require('./lib/scan');
+const { scan, guessStartCommand, guessName, guessDescription } = require('./lib/scan');
 
 const PORT = Number(process.env.PORT) || 7788;
 const HOST = '127.0.0.1'; // 外部からは接続できない
@@ -198,6 +198,20 @@ async function handleApi(req, res, url) {
     return json(res, 200, { found });
   }
 
+  // 登録フォームでフォルダのパスから名前・起動コマンドなどを推測する（手入力を減らすため）。
+  if (resource === 'probe' && method === 'POST') {
+    const { repoPath } = await readBody(req);
+    if (!repoPath) return json(res, 400, { error: 'フォルダを指定してください' });
+    if (!fs.existsSync(repoPath)) return json(res, 400, { error: `フォルダが見つかりません: ${repoPath}` });
+    const info = await git.info(repoPath, { force: true });
+    return json(res, 200, {
+      name: guessName(repoPath),
+      description: guessDescription(repoPath),
+      startCommand: guessStartCommand(repoPath),
+      github: info.githubUrl || '',
+    });
+  }
+
   if (resource === 'import' && method === 'POST') {
     const { items } = await readBody(req);
     const known = new Set(store.listApps().map((a) => path.resolve(a.repoPath)));
@@ -214,7 +228,11 @@ async function handleApi(req, res, url) {
   if (resource === 'settings') {
     if (method === 'GET') return json(res, 200, { settings: store.getSettings() });
     if (method === 'PUT' || method === 'PATCH') {
-      return json(res, 200, { settings: store.updateSettings(await readBody(req)) });
+      const body = await readBody(req);
+      const settings = store.updateSettings(body);
+      // 監視フォルダを追加した直後は、次の定期スキャン（最大5分後）を待たせない。
+      if (body.scanRoots) await autoScanOnce();
+      return json(res, 200, { settings });
     }
   }
 
@@ -244,6 +262,44 @@ server.listen(PORT, HOST, () => {
   console.log(`kanri を起動しました → ${address}`);
   if (process.env.KANRI_NO_OPEN !== '1') openExternally(address);
 });
+
+// 設定した監視フォルダを定期的に見にいき、新しい git リポジトリを
+// 「構想」ステータスで自動登録する。毎回手動で登録する手間をなくすための仕組み。
+const AUTO_SCAN_INTERVAL_MS = 5 * 60 * 1000;
+
+async function autoScanOnce() {
+  const { scanRoots } = store.getSettings();
+  if (!scanRoots?.length) return;
+
+  const known = new Set(store.listApps().map((a) => path.resolve(a.repoPath)));
+  let addedCount = 0;
+  for (const root of scanRoots) {
+    if (!fs.existsSync(root)) continue;
+    for (const found of scan(root)) {
+      const resolved = path.resolve(found.repoPath);
+      if (known.has(resolved)) continue;
+      known.add(resolved); // 同じスキャン内で二重登録しない
+
+      const info = await git.info(found.repoPath, { force: true });
+      store.addApp({
+        name: found.name,
+        description: found.description || '',
+        repoPath: found.repoPath,
+        startCommand: found.startCommand,
+        status: 'idea',
+        autoDetected: true,
+        github: info.githubUrl || '',
+      });
+      addedCount++;
+    }
+  }
+  if (addedCount > 0) console.log(`[kanri] 監視フォルダから ${addedCount} 件を自動検出して登録しました`);
+}
+
+autoScanOnce().catch((err) => console.error('[kanri] 自動スキャンに失敗しました:', err.message));
+setInterval(() => {
+  autoScanOnce().catch((err) => console.error('[kanri] 自動スキャンに失敗しました:', err.message));
+}, AUTO_SCAN_INTERVAL_MS).unref();
 
 let shuttingDown = false;
 async function shutdown() {
