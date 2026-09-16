@@ -337,6 +337,14 @@ function wireEvents() {
   $('#search').addEventListener('input', (e) => { state.search = e.target.value; render(); });
   $('#hide-archived').addEventListener('change', (e) => { state.hideArchived = e.target.checked; render(); });
   $('#btn-new').addEventListener('click', () => openEdit(null));
+  $('#btn-quit').addEventListener('click', guard(async () => {
+    const running = state.apps.filter((a) => a.runtime?.running).map((a) => a.name);
+    const warning = running.length ? `\n起動中のアプリも停止します: ${running.join('、')}` : '';
+    if (!window.confirm(`kanri を終了します。よろしいですか？${warning}`)) return;
+    await api('/shutdown', { method: 'POST' });
+    stopPolling();
+    document.body.innerHTML = '<p class="empty">kanri を終了しました。このタブは閉じてかまいません。</p>';
+  }));
   $('#btn-cancel').addEventListener('click', () => $('#edit-dialog').close());
 
   $('#edit-form').addEventListener('submit', guard(async (e) => {
@@ -428,7 +436,7 @@ function wireEvents() {
 }
 
 // 起動状態とログをゆるく追いかける
-setInterval(() => {
+let pollTimer = setInterval(() => {
   if (document.hidden) return;
   if (state.detailId && state.detailTab === 'logs' && $('#log-follow').checked) {
     const app = state.apps.find((a) => a.id === state.detailId);
@@ -436,6 +444,10 @@ setInterval(() => {
   }
   refresh().catch(() => {});
 }, 5000);
+
+function stopPolling() {
+  clearInterval(pollTimer);
+}
 
 wireEvents();
 refresh().catch((err) => toast(err.message, true));

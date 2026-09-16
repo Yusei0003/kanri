@@ -3,3 +3,6 @@ data/apps.json
 data/logs/
 .DS_Store
 *.log
+
+# アイコンは scripts/make-icon.js が生成する
+assets/

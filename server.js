@@ -51,6 +51,31 @@ function readBody(req) {
   });
 }
 
+// ブラウザで開いている別のサイトから API を叩かれるのを防ぐ。
+// kanri は起動コマンドをそのまま実行できてしまうため、ここは素通しにしない。
+const ALLOWED_HOSTS = new Set([`localhost:${PORT}`, `127.0.0.1:${PORT}`, `[::1]:${PORT}`]);
+const ALLOWED_ORIGINS = new Set([`http://localhost:${PORT}`, `http://127.0.0.1:${PORT}`, `http://[::1]:${PORT}`]);
+
+function rejectReason(req) {
+  // Host が localhost 以外 = DNS リバインディング経由の可能性。
+  if (!ALLOWED_HOSTS.has(String(req.headers.host || '').toLowerCase())) {
+    return 'ホスト名が許可されていません';
+  }
+  if (req.method === 'GET' || req.method === 'HEAD') return null;
+
+  // Origin があれば一致必須。無い場合（curl など）はそのまま通す。
+  const origin = req.headers.origin;
+  if (origin && !ALLOWED_ORIGINS.has(origin.toLowerCase())) {
+    return 'Origin が許可されていません';
+  }
+  // JSON 以外の content-type はプリフライトを伴わない「単純リクエスト」で送れてしまう。
+  const type = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+  if (type && type !== 'application/json') {
+    return 'content-type は application/json のみ受け付けます';
+  }
+  return null;
+}
+
 function openExternally(target) {
   const [cmd, args] = process.platform === 'win32'
     ? ['cmd', ['/c', 'start', '', target]]
@@ -93,6 +118,18 @@ async function handleApi(req, res, url) {
   const segments = url.pathname.split('/').filter(Boolean); // ['api', 'apps', id?, action?]
   const [, resource, id, action] = segments;
   const method = req.method;
+
+  // ランチャーが「もう起動しているか」を見分けるための応答。
+  if (resource === 'health' && method === 'GET') {
+    return json(res, 200, { ok: true, app: 'kanri', pid: process.pid, port: PORT });
+  }
+
+  if (resource === 'shutdown' && method === 'POST') {
+    json(res, 200, { ok: true });
+    console.log('[kanri] 画面から終了が指示されました');
+    setTimeout(shutdown, 100);
+    return;
+  }
 
   if (resource === 'apps' && !id) {
     if (method === 'GET') {
@@ -187,6 +224,11 @@ async function handleApi(req, res, url) {
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${HOST}:${PORT}`);
   try {
+    const reason = rejectReason(req);
+    if (reason) {
+      json(res, 403, { error: reason });
+      return;
+    }
     if (url.pathname.startsWith('/api/')) {
       await handleApi(req, res, url);
       return;
@@ -203,11 +245,18 @@ server.listen(PORT, HOST, () => {
   if (process.env.KANRI_NO_OPEN !== '1') openExternally(address);
 });
 
+let shuttingDown = false;
+async function shutdown() {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log('[kanri] 起動中のアプリを停止して終了します');
+  server.close();
+  runner.stopAll();
+  const { stopped, remaining } = await runner.waitForAllStopped();
+  if (!stopped) console.error(`[kanri] ${remaining}件のプロセスを停止できませんでした`);
+  process.exit(stopped ? 0 : 1);
+}
+
 for (const signal of ['SIGINT', 'SIGTERM']) {
-  process.on(signal, () => {
-    console.log('\n[kanri] 起動中のアプリを停止して終了します');
-    runner.stopAll();
-    server.close(() => process.exit(0));
-    setTimeout(() => process.exit(0), 3000).unref();
-  });
+  process.on(signal, shutdown);
 }
