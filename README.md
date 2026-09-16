@@ -11,13 +11,44 @@ Claude Code で作ったアプリを一覧にし、**ワンクリックで起動
 
 ## デスクトップに置く（macOS）
 
-ターミナルで一度だけ次を実行すると、デスクトップに **kanri** のアイコンができます。
+### 1. kanri を Mac に取り込む
+
+まだ Mac に kanri のファイルが無い場合は、先に取り込みます。
+**ターミナル.app** を開いて、次をそのまま貼り付けて実行してください。
 
 ```bash
+cd ~
+git clone -b claude/zealous-fermi-4748cv https://github.com/Yusei0003/kanri.git
+```
+
+ホームフォルダの下に `kanri` というフォルダができます。
+
+> `git` が入っていない場合は「コマンドライン デベロッパ ツールをインストール」という
+> ダイアログが出ます。「インストール」を押して、終わってからもう一度実行してください。
+
+### 2. デスクトップにアイコンを作る
+
+```bash
+cd ~/kanri
 sh scripts/install-mac.sh
 ```
 
+デスクトップに **kanri** のアイコンができます。
 以降は、そのアイコンをダブルクリックするだけでブラウザに kanri が開きます。
+
+> `scripts/install-mac.sh: No such file or directory` と出る場合は、
+> `cd ~/kanri` を実行し忘れています。`pwd` と打って、
+> `/Users/あなたの名前/kanri` になっているか確かめてください。
+
+### 3. 最新版に更新するとき
+
+```bash
+cd ~/kanri
+git pull
+sh scripts/install-mac.sh
+```
+
+### 使ううえでのメモ
 
 - すでに起動していれば、二重に立ち上げずタブを開くだけです
 - **終了**は画面右上の「終了」ボタン。kanri から起動したアプリもまとめて停止します
