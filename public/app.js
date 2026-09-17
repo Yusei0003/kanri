@@ -119,7 +119,7 @@ function renderStatusFilters() {
   node.replaceChildren(...chips);
 }
 
-function renderCard(app) {
+function renderRow(app) {
   const running = Boolean(app.runtime?.running);
   const git = app.git || {};
   const todos = app.todos || [];
@@ -134,6 +134,10 @@ function renderCard(app) {
     meta.push(el('span', { textContent: git.exists === false ? '⚠ フォルダが見つかりません' : 'gitリポジトリではありません' }));
   }
   if (app.effectiveUrl) meta.push(el('span', { textContent: app.effectiveUrl }));
+  if (app.tags?.length) {
+    meta.push(el('span', { className: 'tags' },
+      app.tags.map((t) => el('span', { className: 'tag', textContent: t }))));
+  }
 
   const actions = [];
   actions.push(el('button', {
@@ -185,25 +189,20 @@ function renderCard(app) {
   }));
   actions.push(el('button', { className: 'btn btn-sm', textContent: '編集', onclick: () => openEdit(app) }));
 
-  return el('article', { className: `card${running ? ' is-running' : ''}` }, [
-    el('div', { className: 'card-head' }, [
-      el('div', { className: 'card-name' }, [
+  return el('article', { className: `app-row${running ? ' is-running' : ''}` }, [
+    el('div', { className: 'row-main' }, [
+      el('div', { className: 'row-top' }, [
         running ? el('span', { className: 'dot', title: `PID ${app.runtime.pid}` }) : null,
-        app.name,
+        el('span', { className: 'row-name', textContent: app.name }),
+        el('span', { className: `badge badge-${app.status}`, textContent: STATUS_LABELS[app.status] || app.status }),
+        app.autoDetected
+          ? el('span', { className: 'badge badge-auto', textContent: '自動検出', title: '監視フォルダから kanri が自動で見つけて登録しました' })
+          : null,
       ]),
-      el('span', { className: `badge badge-${app.status}`, textContent: STATUS_LABELS[app.status] || app.status }),
-      app.autoDetected
-        ? el('span', { className: 'badge badge-auto', textContent: '自動検出', title: '監視フォルダから kanri が自動で見つけて登録しました' })
-        : null,
+      app.description ? el('p', { className: 'row-desc', title: app.description, textContent: app.description }) : null,
+      meta.length ? el('div', { className: 'row-meta' }, meta) : null,
     ]),
-    app.description ? el('p', { className: 'card-desc', textContent: app.description }) : null,
-    meta.length ? el('div', { className: 'card-meta' }, meta) : null,
-    todos.length ? el('div', { className: 'progress' }, [
-      el('span', { style: `width:${Math.round((doneCount / todos.length) * 100)}%` }),
-    ]) : null,
-    app.tags?.length ? el('div', { className: 'tags' },
-      app.tags.map((t) => el('span', { className: 'tag', textContent: t }))) : null,
-    el('div', { className: 'card-actions' }, actions),
+    el('div', { className: 'row-actions' }, actions),
   ]);
 }
 
@@ -211,7 +210,7 @@ function render() {
   renderStats();
   renderStatusFilters();
   const visible = state.apps.filter(matchesFilter);
-  $('#app-list').replaceChildren(...visible.map(renderCard));
+  $('#app-list').replaceChildren(...visible.map(renderRow));
   $('#empty').hidden = state.apps.length > 0;
   if ($('#empty').hidden && visible.length === 0) {
     $('#app-list').replaceChildren(el('p', { className: 'empty', textContent: '条件に合うアプリがありません。' }));
