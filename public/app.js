@@ -133,7 +133,12 @@ function renderRow(app) {
   } else if (app.repoPath) {
     meta.push(el('span', { textContent: git.exists === false ? '⚠ フォルダが見つかりません' : 'gitリポジトリではありません' }));
   }
-  if (app.effectiveUrl) meta.push(el('span', { textContent: app.effectiveUrl }));
+  if (app.effectiveUrl) {
+    // file:// はパス全体が長くなりがちなので、ファイル名だけ短く表示する
+    const isFile = app.effectiveUrl.startsWith('file://');
+    const label = isFile ? `📄 ${decodeURIComponent(app.effectiveUrl.split('/').pop())}` : app.effectiveUrl;
+    meta.push(el('span', { textContent: label, title: isFile ? app.effectiveUrl : '' }));
+  }
   if (app.tags?.length) {
     meta.push(el('span', { className: 'tags' },
       app.tags.map((t) => el('span', { className: 'tag', textContent: t }))));
@@ -334,6 +339,7 @@ function renderScanResults() {
       el('small', { className: 'mono', textContent: item.repoPath }),
       item.description ? el('div', {}, [el('small', { textContent: item.description })]) : null,
       item.startCommand ? el('div', {}, [el('small', { className: 'mono', textContent: `起動: ${item.startCommand}` })]) : null,
+      !item.startCommand && item.url ? el('div', {}, [el('small', { textContent: 'サーバー起動不要（開くだけで動きます）' })]) : null,
     ]),
   ])));
   $('#btn-import').disabled = false;
@@ -427,6 +433,7 @@ function wireEvents() {
     if (!form.name.value.trim()) form.name.value = info.name || '';
     if (!form.description.value.trim()) form.description.value = info.description || '';
     if (!form.startCommand.value.trim()) form.startCommand.value = info.startCommand || '';
+    if (!form.url.value.trim()) form.url.value = info.url || '';
     if (!form.github.value.trim()) form.github.value = info.github || '';
     toast('フォルダの内容から自動入力しました');
   }));

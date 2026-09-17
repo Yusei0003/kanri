@@ -9,7 +9,7 @@ const { spawn } = require('node:child_process');
 const store = require('./lib/store');
 const runner = require('./lib/runner');
 const git = require('./lib/git');
-const { scan, guessStartCommand, guessName, guessDescription } = require('./lib/scan');
+const { scan, guessStartCommand, guessUrl, guessName, guessDescription } = require('./lib/scan');
 
 const PORT = Number(process.env.PORT) || 7788;
 const HOST = '127.0.0.1'; // 外部からは接続できない
@@ -208,6 +208,7 @@ async function handleApi(req, res, url) {
       name: guessName(repoPath),
       description: guessDescription(repoPath),
       startCommand: guessStartCommand(repoPath),
+      url: guessUrl(repoPath),
       github: info.githubUrl || '',
     });
   }
@@ -286,6 +287,7 @@ async function autoScanOnce() {
         description: found.description || '',
         repoPath: found.repoPath,
         startCommand: found.startCommand,
+        url: found.url || '',
         status: 'idea',
         autoDetected: true,
         github: info.githubUrl || '',
